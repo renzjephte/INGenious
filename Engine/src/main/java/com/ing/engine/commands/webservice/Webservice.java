@@ -1030,8 +1030,8 @@ public class Webservice extends General {
     }};
 
     private KeyManager[] loadKeyStore() {
-        String keystorePath = Control.getCurrentProject().getProjectSettings().getDriverSettings().getProperty("keyStorePath");
-        String keystorePassword = Control.getCurrentProject().getProjectSettings().getDriverSettings().getProperty("keyStorePassword");
+        String keystorePath = Control.getCurrentProject().getProjectSettings().getDriverSettings().getKeyStorePath();
+        String keystorePassword = Control.getCurrentProject().getProjectSettings().getDriverSettings().getKeyStorePassword();
         KeyStore keyStore;
         KeyManagerFactory kmf = null;
         try {
