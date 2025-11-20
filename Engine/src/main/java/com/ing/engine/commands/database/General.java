@@ -116,7 +116,7 @@ public class General extends Command {
     private void initialize(Boolean commit,int timeout) throws SQLException {
         colNames.clear();
         dbconnection.setAutoCommit(commit);
-        statement = dbconnection.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE,ResultSet.CONCUR_UPDATABLE);
+        statement = dbconnection.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE,ResultSet.CONCUR_READ_ONLY);
         statement.setQueryTimeout(timeout);
         resolveVars();
     }
