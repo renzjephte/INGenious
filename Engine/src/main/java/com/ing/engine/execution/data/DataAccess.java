@@ -218,6 +218,7 @@ public class DataAccess extends DataAccessInternal {
         } else if (isNull(env)) {
             throw new GlobalDataNotFoundException(context, gid, field);
         }
+        env.load();
         env.setValueAt(value, env.getRecordIndexByKey(gid), env.findColumn(field));
         env.saveChanges();
     }

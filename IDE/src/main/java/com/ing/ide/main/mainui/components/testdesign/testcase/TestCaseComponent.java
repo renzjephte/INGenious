@@ -41,6 +41,8 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
@@ -97,6 +99,10 @@ public class TestCaseComponent extends JPanel implements ActionListener {
     private final AppMainFrame sMainFrame;
     
     private ClipboardMonitor monitor;
+    
+    private CompletableFuture<Void> launchPlaywrightTask;
+    
+    public static long INSTANCE_START_TIME;
 
     public TestCaseComponent(TestDesign testDesign, AppMainFrame sMainFrame) {
         this.testDesign = testDesign;
@@ -417,26 +423,38 @@ public class TestCaseComponent extends JPanel implements ActionListener {
     }
 
     public void record() throws IOException {
-        String ProjectLocation = sMainFrame.getProject().getLocation();
-        File recordedFile = new File(ProjectLocation + File.separator + "Recording" + File.separator + "recording.txt");
-        if (recordedFile.exists()) {
-            boolean deleted = recordedFile.delete();
-            if (deleted) {
-                System.out.println("Existing recording.txt deleted.");
-            }
+        String projectLocation = sMainFrame.getProject().getLocation();
+        INSTANCE_START_TIME = System.currentTimeMillis();
+        if (launchPlaywrightTask == null || launchPlaywrightTask.isDone()) {
+            PlaywrightSpinner playwrightSpinnerGUI = new PlaywrightSpinner();
+
+            launchPlaywrightTask = CompletableFuture.runAsync(() -> {
+                try {
+                    launchPlaywright(playwrightSpinnerGUI);
+                } catch (IOException ex) {
+                    Logger.getLogger(TestCaseComponent.class.getName()).log(Level.SEVERE, "Error launching Playwright", ex);
+                }
+            });
+
+            CompletableFuture<Void> playwrightLoading = CompletableFuture.runAsync(() -> {
+                try {
+                    playwrightLoading(playwrightSpinnerGUI);
+                } catch (Exception ex) {
+                    Logger.getLogger(TestCaseComponent.class.getName()).log(Level.WARNING, "Error in playwright loading UI", ex);
+                }
+            });
+            CompletableFuture.allOf(launchPlaywrightTask, playwrightLoading)
+                .whenComplete((result, throwable) -> {
+                    if (throwable != null) {
+                        Logger.getLogger(TestCaseComponent.class.getName()).log(Level.SEVERE, "Playwright tasks failed", throwable);
+                    }
+                    SwingUtilities.invokeLater(() -> toolBar.enableRecordButton());
+                });
+
+        } else {
+            System.out.println("Playwright is already running. Skipping duplicate launch.");
+            SwingUtilities.invokeLater(() -> toolBar.enableRecordButton());
         }
-        PlaywrightSpinner playwrightSpinnerGUI = new PlaywrightSpinner();
-        CompletableFuture<Void> launchPlaywright = CompletableFuture.runAsync(() -> {
-            try {
-                launchPlaywright(playwrightSpinnerGUI);
-            } catch (IOException ex) {
-                Logger.getLogger(TestCaseComponent.class.getName()).log(Level.SEVERE, null, ex);
-            }
-        });
-        CompletableFuture<Void> playwrightLoading = CompletableFuture.runAsync(() -> {
-            playwrightLoading(playwrightSpinnerGUI);
-        });
-        CompletableFuture<Void> playwright = CompletableFuture.allOf(launchPlaywright, playwrightLoading);
     }
 
     public Process startPlaywrightProcess(String processName, PlaywrightSpinner playwrightSpinnerGUI) {
@@ -484,26 +502,25 @@ public class TestCaseComponent extends JPanel implements ActionListener {
         return null;
     }
 
-    
-     public void initialization(PlaywrightSpinner playwrightSpinnerGUI){
-        try{
-            String[] command = new String[0];
-            String osName = System.getProperty("os.name").toLowerCase();
-            if (osName.contains("windows")) {
-                // Windows command
-                
-                command = new String[]{"cmd", "/c", "mvn initialize -f engine/pom.xml"};
-            } else if (osName.contains("mac")) {
-                // Mac command
-                command = new String[]{"bash", "-l", "-c", "mvn initialize -f engine/pom.xml"};
-            } 
-           Runtime.getRuntime().exec(command);
-       }catch (Exception ex){
-         System.out.println(ex.getMessage());
-         //playwrightSpinnerGUI.appendLog(ex.getMessage());
-       }
-    }
-
+//    public void initialization(PlaywrightSpinner playwrightSpinnerGUI){
+//        try{
+//            String[] command = new String[0];
+//            String osName = System.getProperty("os.name").toLowerCase();
+//            if (osName.contains("windows")) {
+//                // Windows command
+//                
+//                command = new String[]{"cmd", "/c", "mvn initialize -f engine/pom.xml"};
+//            } else if (osName.contains("mac")) {
+//                // Mac command
+//                command = new String[]{"bash", "-l", "-c", "mvn initialize -f engine/pom.xml"};
+//            } 
+//           Runtime.getRuntime().exec(command);
+//       }catch (Exception ex){
+//         System.out.println(ex.getMessage());
+//         //playwrightSpinnerGUI.appendLog(ex.getMessage());
+//       }
+//    }
+         
     public void launchPlaywright(PlaywrightSpinner playwrightSpinnerGUI) throws IOException {
         System.out.println("============================== Playwright Log Started ==============================");
         //playwrightSpinnerGUI.appendLog("============================== Playwright Log Started ==============================");
@@ -557,15 +574,31 @@ public class TestCaseComponent extends JPanel implements ActionListener {
         System.out.println("============================== Playwright Log Ended ==============================");
         //playwrightSpinnerGUI.appendLog("============================== Playwright Log Ended ==============================");
 
-         new Thread(() -> {
+
+        new Thread(() -> {
             try {
                 String projectLocation = sMainFrame.getProject().getLocation();
                 launchRecorder.waitFor();
 
-                File recordedFile = new File(projectLocation + File.separator + "Recording" + File.separator + "recording.txt");
+                File recordingDir = new File(projectLocation + File.separator + "Recording");
+                File[] recordingFiles = recordingDir.listFiles((dir, name) -> name.startsWith("recording_") && name.endsWith(".txt"));
+
+                File latestFile = null;
+                if (recordingFiles != null && recordingFiles.length > 0) {
+                    List<File> filteredFiles = Arrays.stream(recordingFiles)
+                            .filter(file -> file.lastModified() >= INSTANCE_START_TIME)
+                            .sorted(Comparator.comparingLong(File::lastModified).reversed())
+                            .toList();
+
+                    if (!filteredFiles.isEmpty()) {
+                        latestFile = filteredFiles.get(0);
+                    }
+                }
+
+                final File recordedFile = latestFile;
 
                 SwingUtilities.invokeLater(() -> {
-                    if (recordedFile.exists()) {
+                    if (recordedFile != null && recordedFile.exists()) {
                         RecordedStepsImportDialog window = new RecordedStepsImportDialog(sMainFrame);
                         window.setLocationRelativeTo(null);
                         window.setVisible(true);
@@ -579,11 +612,11 @@ public class TestCaseComponent extends JPanel implements ActionListener {
                     }
                     monitor.stopMonitoring();
                 });
-
-             } catch (InterruptedException e) {
+            } catch (InterruptedException e) {
                 e.printStackTrace();
-             }
-            }).start();
+            }
+        }).start();
+
     }
 
     public void playwrightLoading(PlaywrightSpinner playwrightSpinnerGUI) {

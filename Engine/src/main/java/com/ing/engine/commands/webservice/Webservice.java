@@ -5,6 +5,7 @@ import com.ing.engine.commands.browser.General;
 import com.ing.engine.constants.FilePath;
 import com.ing.engine.core.CommandControl;
 import com.ing.engine.core.Control;
+import com.ing.engine.execution.exception.ActionException;
 import com.ing.engine.support.Status;
 import com.ing.engine.support.methodInf.Action;
 import com.ing.engine.support.methodInf.InputType;
@@ -84,9 +85,10 @@ public class Webservice extends General {
     public void putRestRequest() {
         try {
             createhttpRequest(RequestMethod.PUT);
-        } catch (InterruptedException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+        } catch (Exception e) {
+            Report.updateTestLog(Action,
+                    "An unexpected error occurred while executing the request : " + "\n" + e.getMessage(),
+                    Status.FAIL);
         }
     }
 
@@ -94,8 +96,10 @@ public class Webservice extends General {
     public void postRestRequest() {
         try {
             createhttpRequest(RequestMethod.POST);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            Report.updateTestLog(Action,
+                    "An unexpected error occurred while executing the request : " + "\n" + e.getMessage(),
+                    Status.FAIL);
         }
     }
 
@@ -103,9 +107,10 @@ public class Webservice extends General {
     public void postSoapRequest() {
         try {
             createhttpRequest(RequestMethod.POST);
-        } catch (InterruptedException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+        } catch (Exception e) {
+            Report.updateTestLog(Action,
+                    "An unexpected error occurred while executing the request : " + "\n" + e.getMessage(),
+                    Status.FAIL);
         }
     }
 
@@ -113,9 +118,10 @@ public class Webservice extends General {
     public void patchRestRequest() {
         try {
             createhttpRequest(RequestMethod.PATCH);
-        } catch (InterruptedException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+        } catch (Exception e) {
+            Report.updateTestLog(Action,
+                    "An unexpected error occurred while executing the request : " + "\n" + e.getMessage(),
+                    Status.FAIL);
         }
     }
 
@@ -123,9 +129,10 @@ public class Webservice extends General {
     public void getRestRequest() {
         try {
             createhttpRequest(RequestMethod.GET);
-        } catch (InterruptedException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+        } catch (Exception e) {
+            Report.updateTestLog(Action,
+                    "An unexpected error occurred while executing the request : " + "\n" + e.getMessage(),
+                    Status.FAIL);
         }
     }
 
@@ -133,9 +140,10 @@ public class Webservice extends General {
     public void deleteRestRequest() {
         try {
             createhttpRequest(RequestMethod.DELETE);
-        } catch (InterruptedException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+        } catch (Exception e) {
+            Report.updateTestLog(Action,
+                    "An unexpected error occurred while executing the request : " + "\n" + e.getMessage(),
+                    Status.FAIL);
         }
     }
 
@@ -143,9 +151,10 @@ public class Webservice extends General {
     public void deleteWithPayload() {
         try {
             createhttpRequest(RequestMethod.DELETEWITHPAYLOAD);
-        } catch (InterruptedException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+        } catch (Exception e) {
+            Report.updateTestLog(Action,
+                    "An unexpected error occurred while executing the request : " + "\n" + e.getMessage(),
+                    Status.FAIL);
         }
     }
 
@@ -917,7 +926,7 @@ public class Webservice extends General {
         }
     }
 
-    private void createhttpRequest(RequestMethod requestmethod) throws InterruptedException {
+    private void createhttpRequest(RequestMethod requestmethod) throws InterruptedException, Exception {
         try {
             setheaders();
             setRequestMethod(requestmethod);
@@ -965,6 +974,9 @@ public class Webservice extends General {
                         "Error in executing " + requestmethod.toString() + " request : " + "\n" + ex.getMessage(),
                         Status.DEBUG);
             }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+            throw new ActionException(e);
         }
     }
 
