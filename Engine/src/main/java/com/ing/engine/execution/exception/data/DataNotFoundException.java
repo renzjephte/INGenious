@@ -18,7 +18,7 @@ public class DataNotFoundException extends RuntimeException {
     public String field;
     public CauseInfo cause;
 
-    protected DataNotFoundException(String name) {
+    public DataNotFoundException(String name) {
         super(name);
     }
     

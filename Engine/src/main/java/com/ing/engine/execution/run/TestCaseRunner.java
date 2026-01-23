@@ -3,9 +3,12 @@ package com.ing.engine.execution.run;
 import com.ing.datalib.component.Project;
 import com.ing.datalib.component.TestCase;
 import com.ing.datalib.component.TestStep;
+import com.ing.datalib.testdata.model.TestDataModel;
 import com.ing.engine.constants.SystemDefaults;
 import com.ing.engine.core.CommandControl;
+import com.ing.engine.execution.data.DataAccess;
 import com.ing.engine.execution.data.DataIterator;
+import com.ing.engine.execution.data.DataProcessor;
 import com.ing.engine.execution.data.Parameter;
 import com.ing.engine.execution.data.StepSet;
 import com.ing.engine.execution.exception.DriverClosedException;
@@ -21,6 +24,7 @@ import com.ing.engine.execution.exception.element.ElementException;
 import com.ing.engine.reporting.TestCaseReport;
 import com.ing.engine.support.Status;
 import com.ing.engine.support.Step;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -38,8 +42,8 @@ public class TestCaseRunner {
 
     private static final Logger LOG = Logger.getLogger(TestCaseRunner.class.getName());
 
-    private TestCase testcase;
-    private String scenario, testCase;
+    private TestCase testCase;
+    private String scenario, testCaseName;
 
     private final Stack<StepSet> stepStack = new Stack<>();
 
@@ -53,34 +57,36 @@ public class TestCaseRunner {
     private CommandControl control;
 
     private int currentSubIteration = -1;
+    private boolean breakSubIterationFlag = false;
+    private boolean isReusableComponent = false;
 
     //<editor-fold defaultstate="collapsed" desc="_init_">
     public TestCaseRunner(ProjectRunner exe, String scenario, String testCase) {
         this(exe, null, null, new Parameter());
         iterater = exe.getIterater(scenario, testCase);
         this.scenario = scenario;
-        this.testCase = testCase;
+        this.testCaseName = testCase;
     }
 
-    public TestCaseRunner(ProjectRunner exe, TestCase testcase) {
-        this(exe, null, testcase, new Parameter());
-        iterater = exe.getIterater(testcase);
+    public TestCaseRunner(ProjectRunner exe, TestCase testCase) {
+        this(exe, null, testCase, new Parameter());
+        iterater = exe.getIterater(testCase);
     }
 
-    public TestCaseRunner(TestCaseRunner parent, TestCase testcase) {
-        this(parent.exe, parent, testcase, new Parameter());
+    public TestCaseRunner(TestCaseRunner parent, TestCase testCase) {
+        this(parent.exe, parent, testCase, new Parameter());
     }
 
-    public TestCaseRunner(TestCaseRunner parent, TestCase testcase,
+    public TestCaseRunner(TestCaseRunner parent, TestCase testCase,
             Parameter parameter) {
-        this(parent.exe, parent, testcase, parameter);
+        this(parent.exe, parent, testCase, parameter);
     }
 
-    private TestCaseRunner(TestRunner exe, TestCaseRunner parent, TestCase testcase,
+    private TestCaseRunner(TestRunner exe, TestCaseRunner parent, TestCase testCase,
             Parameter parameter) {
         this.exe = exe;
         this.context = parent;
-        this.testcase = testcase;
+        this.testCase = testCase;
         this.parameter = parameter;
     }
 //</editor-fold>
@@ -109,18 +115,18 @@ public class TestCaseRunner {
     }
 
     public String scenario() {
-        if (testcase != null) {
-            return testcase.getScenario().getName();
+        if (testCase != null) {
+            return testCase.getScenario().getName();
         } else {
             return scenario;
         }
     }
 
     public String testcase() {
-        if (testcase != null) {
-            return testcase.getName();
+        if (testCase != null) {
+            return testCase.getName();
         } else {
-            return testCase;
+            return testCaseName;
         }
     }
 
@@ -185,13 +191,13 @@ public class TestCaseRunner {
     }
 
     public TestCase getTestCase() {
-        return testcase;
+        return testCase;
     }
 //</editor-fold>
 
     //<editor-fold defaultstate="collapsed" desc="internal apis">
     private boolean canRunStep(int currStep) {
-        return currStep < testcase.getTestSteps().size() && canRun();
+        return currStep < testCase.getTestSteps().size() && canRun();
     }
 
     private boolean canRun() {
@@ -209,6 +215,54 @@ public class TestCaseRunner {
                 stepStack.peek().isLoop = Parameter.isLoop(testStep.getCondition());
             }
         }
+    }
+    
+    /***
+     * Check for end of loops to set breakSubIterationFlag to true.
+     * Applies to dynamic Start Param - End Param blocks.
+     * Execution is based on the occurence of the next data in the test sheet.
+     * This method flags that the last data in the data sheet has been reached.
+     * 
+     * @param testStep
+     * @param currStep
+     * @return
+     *      true  - Reached the last subiteration within a Start Param - End Param pair
+     *      false - Allows the loop to iterate one more time
+     */
+    private boolean checkForLastSubIteration(TestStep testStep, int currStep){
+        //check the next step if it is the end of a loop
+        TestStep nextStep = null;
+        try {
+            // Read next data if step with data access
+            String data = "";
+            String testInput = testStep.getInput();
+            if(!testInput.startsWith("@") && DataProcessor.isInputPatternDataSheet(testInput)) {
+                String sheet = testStep.getInput().split(":")[0];
+                String dataCol = testStep.getInput().split(":")[1];
+                
+                data = DataAccess.getNextData(this, sheet, dataCol, parameter.getIteration()+"", (this.currentSubIteration)+"");
+            }
+            if (data==null) {
+                // Execution has reached end of the test data sheet
+                this.breakSubIterationFlag = true;
+            }
+            
+            if (breakSubIterationFlag) {
+                try {
+                    nextStep = testCase.getTestSteps().get(currStep+1);
+                } catch (IndexOutOfBoundsException ex) {
+                    // Reached the last step of the component
+                    return true;
+                }
+            }
+        } catch (Exception ex){
+            // Exceptions are not applicable since this is a checker method.
+            System.out.println(ex.getMessage());
+        } catch (Throwable ex) {
+            System.out.println(ex.getMessage());
+        }
+        
+        return false;
     }
 
     private int checkForEndLoop(TestStep testStep, int currStep) {
@@ -327,20 +381,21 @@ public class TestCaseRunner {
 
     //<editor-fold defaultstate="collapsed" desc="run">
     public void run(CommandControl cc, int iter)
-            throws DriverClosedException, TestFailedException {
+            throws DriverClosedException, TestFailedException, DataNotFoundException {
         parameter.setIteration(iter);
         setControl(cc);
-        if (testcase != null) {
-            testcase.loadTableModel();
+        if (testCase != null) {
+            testCase.loadTableModel();
             /*
             * caution: breaking the loop will stop the iteration
              */
             for (int currStep = 0; canRunStep(currStep); currStep++) {
-                TestStep testStep = testcase.getTestSteps().get(currStep);
+                TestStep testStep = testCase.getTestSteps().get(currStep);
                 if (!testStep.isCommented()) {
                     checkForStartLoop(testStep, currStep);
                     try {
                         runStep(testStep);
+                        checkForLastSubIteration(testStep, currStep);
                     } catch (DriverClosedException | TestFailedException | UnCaughtException ex) {
                         throw ex;
                     } catch (DataNotFoundException ex) {
@@ -365,7 +420,30 @@ public class TestCaseRunner {
                     } catch (Throwable ex) {
                         onError(ex);
                     }
-                    currStep = checkForEndLoop(testStep, currStep);
+                    
+                    TestStep nextStep = null;
+                    boolean hasNextStep = true;
+                    try {
+                        nextStep = testCase.getTestSteps().get(currStep+1);
+                    } catch (IndexOutOfBoundsException ex) {
+                        //reached last step of component
+                        hasNextStep = false;
+                    }
+                    
+                    int stackSize = this.stepStack.size();
+                    if (breakSubIterationFlag && !hasNextStep){
+                        // all steps of the component were executed
+                        breakSubIteration();
+                        breakSubIterationFlag = false;
+                        if (stackSize==0){
+                            throw new DataNotFoundException("Reached the end of data sheet");
+                        }
+                    } else if (breakSubIterationFlag && testStep.getCondition().startsWith("End Param")) {
+                        breakSubIterationFlag = false;
+                    } else {
+                        // if reusable component execution was completed, move to nextStep in parent loop
+                        currStep = checkForEndLoop(testStep, currStep);
+                    }
                 }
             }
         }
@@ -452,7 +530,7 @@ public class TestCaseRunner {
 //</editor-fold>
     @Override
     public String toString() {
-        return String.format("[%s:%s] [%s] [%s]", testcase.getScenario(), testcase,
+        return String.format("[%s:%s] [%s] [%s]", testCase.getScenario(), testCase,
                 parameter, getRoot().iterater);
     }
 
