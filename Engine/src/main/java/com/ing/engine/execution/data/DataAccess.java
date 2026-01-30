@@ -74,7 +74,7 @@ public class DataAccess extends DataAccessInternal {
      */
     public static String getNextData(TestCaseRunner context, String sheet, String field, String iter, String subIter)
             throws DataNotFoundException {
-        int subIteration = subIter + 1;
+        String subIteration = (Integer.parseInt(subIter) + 1) + "";
         Object val;
         TestDataModel env;
         TestDataModel def = getDefModel(context, sheet);
