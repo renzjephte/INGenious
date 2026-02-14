@@ -76,7 +76,7 @@ public class Task implements Runnable {
             try {
                 System.out.println("👉 Running Iteration " + iter);
                 runIteration(iter++);
-                if (isPlaywrightExecution()) {
+                if (isPlaywrightExecution() && isLocalExecution()) {
                     closePlaywrightInstance(iter - 1);
                 }
             } catch (Exception ex) {
@@ -187,7 +187,7 @@ public class Task implements Runnable {
     }
 
     private void closePlaywrightDriver() {
-        if (playwrightDriver != null && !getRunSettings().useExistingDriver() && !Control.exe.getExecSettings().getRunSettings().isGridExecution()) {
+        if (playwrightDriver != null && !getRunSettings().useExistingDriver() && isLocalExecution()) {
             try {
                 playwrightDriver.closeBrowser();
             } catch (Exception ex) {
@@ -246,6 +246,7 @@ public class Task implements Runnable {
     private void onError(Throwable ex, String err, String desc) {
         onError(ex, err, desc, Status.DEBUG);
     }
+    
 
     private void onFail(Throwable ex, String desc, Status s) {
         onError(ex, "[Breaking execution!]", desc, s);
@@ -284,6 +285,10 @@ public class Task implements Runnable {
         return webDriver;
     }
 
+    public boolean isLocalExecution() {
+            return !Control.exe.getExecSettings().getRunSettings().isGridExecution();
+    }
+    
     public boolean isPlaywrightExecution() {
         boolean isBrowserExecution = false;
         try {

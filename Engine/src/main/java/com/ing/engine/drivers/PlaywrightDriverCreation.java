@@ -119,8 +119,8 @@ public class PlaywrightDriverCreation {
     public void closeBrowser() {
         if (this.page != null) {
             try {
-                closeBrowserContext();
                 this.page.close();
+                closeBrowserContext();
             } catch (Exception ex) {
                 Logger.getLogger(this.getClass().getName()).log(Level.OFF, "Couldn't Kill the Driver", ex);
             }

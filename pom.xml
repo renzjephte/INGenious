@@ -19,7 +19,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <playwright.version>LATEST</playwright.version>
+        <playwright.version>1.58.0</playwright.version>
         <commons-cli.version>1.4</commons-cli.version>
         <javamail.version>1.4.7</javamail.version>
         <json-simple.version>1.1.1</json-simple.version>
@@ -37,8 +37,8 @@
         <apache.poi.version>5.2.5</apache.poi.version>
         <apache.poi.schemas.version>4.1.2</apache.poi.schemas.version>
         <httpclient.version>4.5.14</httpclient.version>
-        <extentreport.version>LATEST</extentreport.version>
-        <playwright.axe.version>LATEST</playwright.axe.version>
+        <extentreport.version>5.1.2</extentreport.version>
+        <playwright.axe.version>4.11.1</playwright.axe.version>
         <testng.version>7.7.1</testng.version>
         <freemarker.version>2.3.32</freemarker.version>
         <stax-api.version>1.0.1</stax-api.version>
@@ -55,15 +55,18 @@
         <commons-lang.version>2.6</commons-lang.version>
         <httpcore.version>4.4.16</httpcore.version>
         <guava.version>32.0.1-jre</guava.version>
-        <appium.version>LATEST</appium.version>
-        <javafaker.version>LATEST</javafaker.version>
-        <kafka-clients.version>LATEST</kafka-clients.version>
-        <avro.version>LATEST</avro.version>
-        <kafka-avro-serializer.version>LATEST</kafka-avro-serializer.version>
-        <ibmmq.version>LATEST</ibmmq.version>
+        <appium.version>10.0.0</appium.version>
+        <javafaker.version>1.0.2</javafaker.version>
+        <kafka-clients.version>3.9.0</kafka-clients.version>
+        <avro.version>1.12.0</avro.version>
+        <kafka-avro-serializer.version>7.8.0</kafka-avro-serializer.version>
+        <ibmmq.version>9.4.5.0</ibmmq.version>
         <mac.version>mac-aarch64</mac.version>
         <setupDir>../Dist/release</setupDir>
         <resourceDir>../Resources</resourceDir>
+
+        <mockito.version>5.14.2</mockito.version>
+        <assertj.version>3.26.3</assertj.version>
 
         <java.version>11</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
@@ -71,7 +74,36 @@
 
     </properties>
     <name>ingenious</name>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.assertj</groupId>
+                <artifactId>assertj-core</artifactId>
+                <version>${assertj.version}</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.8.1</version>
+                    <configuration>
+                        <source>${maven.compiler.source}</source>
+                        <target>${maven.compiler.target}</target>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
         <plugins>
             <plugin>
                 <artifactId>maven-clean-plugin</artifactId>
@@ -92,10 +124,35 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.8.1</version>
+            </plugin>
+            <!-- JaCoCo for code coverage -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- OWASP Dependency Check — run via: mvn dependency-check:check -->
+            <plugin>
+                <groupId>org.owasp</groupId>
+                <artifactId>dependency-check-maven</artifactId>
+                <version>11.1.1</version>
                 <configuration>
-                    <source>${maven.compiler.source}</source>
-                    <target>${maven.compiler.target}</target>
+                    <failBuildOnCVSS>7</failBuildOnCVSS>
+                    <failOnError>false</failOnError>
                 </configuration>
             </plugin>
             <plugin>
