@@ -621,11 +621,24 @@ private final static ObjectMapper mapper = new ObjectMapper();
     @Action(object = ObjectType.KAFKA, desc = "Identify target message", input = InputType.YES, condition = InputType.YES)
     public void identifyTargetMessage() {
         try {
-            kafkaRecordIdentifierValue.put(key, Data);
-            kafkaRecordIdentifierPath.put(key, Condition);
-            Report.updateTestLog(Action,
-                    "Target message set with tag value as [" + Data + "] and tag path as [" + Condition + "].",
-                    Status.DONE);
+            // --- Multi-condition support: append (path -> value) per key ---
+            final String path = Condition;
+            final String value = Data;
+
+            // Create a single-condition map (path -> value)
+            HashMap<String, String> identifyValuePath = new HashMap<>();
+            identifyValuePath.put(path, value);
+
+            // Get or create the list for this key, then add the condition map
+            List<HashMap<String, String>> conditionsForKey =
+                    kafkaRecordIdentifier.computeIfAbsent(key, k -> new ArrayList<>());
+            conditionsForKey.add(identifyValuePath);
+            Report.updateTestLog(
+                    Action,
+                    "Added target identifier: [path=" + path + " , value=" + value + "] for key [" + key + "]. "
+                            + "Total conditions for key now: " + conditionsForKey.size(),
+                    Status.DONE
+            );
         } catch (Exception e) {
             Report.updateTestLog(Action, "Error in target message setup : " + e.getMessage(), Status.FAIL);
         }
@@ -660,12 +673,30 @@ private final static ObjectMapper mapper = new ObjectMapper();
 
     public boolean getJSONRecordForAssertion(String JSONMessage) {
         try {
-            String jsonpath = kafkaRecordIdentifierPath.get(key);
-            String value = JsonPath.read(JSONMessage, jsonpath).toString();
-            if (value.equals(kafkaRecordIdentifierValue.get(key))) {
+            // Prefer multi-condition evaluation if present
+            List<HashMap<String, String>> conditions = kafkaRecordIdentifier.get(key);
+
+            if (conditions != null && !conditions.isEmpty()) {
+                // ALL conditions must match
+                for (HashMap<String, String> cond : conditions) {
+                    // Each cond map contains exactly one entry: path -> expectedValue
+                    Map.Entry<String, String> entry = cond.entrySet().iterator().next();
+                    String path = entry.getKey();
+                    String expected = entry.getValue();
+
+                    Object actualObj = com.jayway.jsonpath.JsonPath.read(JSONMessage, path);
+                    String actual = (actualObj == null) ? null : String.valueOf(actualObj);
+
+                    if (!java.util.Objects.equals(actual, expected)) {
+                        // Early exit on first mismatch
+                        return false;
+                    }
+                }
+                // All matched → set the matched message and return true
                 kafkaConsumeRecordValue.put(key, JSONMessage);
                 return true;
             }
+
         } catch (Exception ex) {
             Logger.getLogger(this.getClass().getName()).log(Level.OFF, null, ex);
             Report.updateTestLog(Action, "Error in validating JSON element :" + "\n" + ex.getMessage(), Status.DEBUG);
@@ -675,25 +706,44 @@ private final static ObjectMapper mapper = new ObjectMapper();
 
     public boolean getXMLRecordForAssertion(String XMLMessage) {
         try {
-            DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder dBuilder;
-            InputSource inputSource = new InputSource();
-            inputSource.setCharacterStream(new StringReader(XMLMessage));
-            dBuilder = dbFactory.newDocumentBuilder();
-            Document doc = dBuilder.parse(inputSource);
+            javax.xml.parsers.DocumentBuilderFactory dbFactory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            javax.xml.parsers.DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+            org.xml.sax.InputSource inputSource = new org.xml.sax.InputSource(new java.io.StringReader(XMLMessage));
+            org.w3c.dom.Document doc = dBuilder.parse(inputSource);
             doc.getDocumentElement().normalize();
-            XPath xPath = XPathFactory.newInstance().newXPath();
-            String expression = kafkaRecordIdentifierPath.get(key);
-            String value = (String) xPath.compile(expression).evaluate(doc);
-            if (value.equals(kafkaRecordIdentifierValue.get(key))) {
-                kafkaConsumeRecordValue.put(key, XMLMessage);
-                return true;
+
+            javax.xml.xpath.XPath xPath = javax.xml.xpath.XPathFactory.newInstance().newXPath();
+
+            // Get the list of (path -> expectedValue) condition maps for this key
+            List<HashMap<String, String>> conditions = kafkaRecordIdentifier.get(key);
+            if (conditions == null || conditions.isEmpty()) {
+                // No conditions defined for this key
+                return false;
             }
+
+            // ALL conditions must match
+            for (HashMap<String, String> cond : conditions) {
+                Map.Entry<String, String> entry = cond.entrySet().iterator().next();
+                String path = entry.getKey();
+                String expected = entry.getValue();
+
+                String actual = xPath.compile(path).evaluate(doc);
+
+                if (!java.util.Objects.equals(actual, expected)) {
+                    // Early exit on first mismatch
+                    return false;
+                }
+            }
+
+            // All matched → record the matched message
+            kafkaConsumeRecordValue.put(key, XMLMessage);
+            return true;
+
         } catch (Exception ex) {
             Logger.getLogger(this.getClass().getName()).log(Level.OFF, null, ex);
             Report.updateTestLog(Action, "Error in validating XML element :" + "\n" + ex.getMessage(), Status.DEBUG);
+            return false;
         }
-        return false;
     }
 
     @Action(object = ObjectType.KAFKA, desc = "Close Consumer", input = InputType.NO, condition = InputType.NO)
@@ -712,6 +762,7 @@ private final static ObjectMapper mapper = new ObjectMapper();
             kafkaConsumerPollRecord.remove(key);
             kafkaRecordIdentifierValue.remove(key);
             kafkaRecordIdentifierPath.remove(key);
+            kafkaRecordIdentifier.remove(key);
             Report.updateTestLog(Action, "Consumer closed successfully", Status.DONE);
         } catch (Exception ex) {
             Report.updateTestLog(Action, "Error in closing Consumer.", Status.DEBUG);
@@ -962,6 +1013,23 @@ private final static ObjectMapper mapper = new ObjectMapper();
                 case "Producer_Key_Password":
                     prop.put("ssl.key.password", value);
                     break;
+                case "Schema_Registery_Truststore_Location":
+                    String producerSchemaTrustStroreLocation = Paths.get(value).toAbsolutePath().toString();
+                    prop.put("schema.registry.ssl.truststore.location", producerSchemaTrustStroreLocation);
+                    break;
+                case "Schema_Registery_Truststore_Password":
+                    prop.put("schema.registry.ssl.truststore.password", value);
+                    break;
+                case "Schema_Registery_Keystore_Location":
+                    String producerSchemaKeyStroreLocation = Paths.get(value).toAbsolutePath().toString();
+                    prop.put("schema.registry.ssl.keystore.location", producerSchemaKeyStroreLocation);
+                    break;
+                case "Schema_Registery_Keystore_Password":
+                    prop.put("schema.registry.ssl.keystore.password", value);
+                    break;
+                case "Schema_Registery_Key_Password":
+                    prop.put("schema.registry.ssl.key.password", value);
+                    break;
             }
         }
         return prop;
@@ -994,6 +1062,24 @@ private final static ObjectMapper mapper = new ObjectMapper();
                 case "Consumer_Key_Password":
                     prop.put("ssl.key.password", value);
                     break;
+                case "Schema_Registery_Truststore_Location":
+                    String consumerSchemaTrustStroreLocation = Paths.get(value).toAbsolutePath().toString();
+                    prop.put("schema.registry.ssl.truststore.location", consumerSchemaTrustStroreLocation);
+                    break;
+                case "Schema_Registery_Truststore_Password":
+                    prop.put("schema.registry.ssl.truststore.password", value);
+                    break;
+                case "Schema_Registery_Keystore_Location":
+                    String consumerSchemaKeyStroreLocation = Paths.get(value).toAbsolutePath().toString();
+                    prop.put("schema.registry.ssl.keystore.location", consumerSchemaKeyStroreLocation);
+                    break;
+                case "Schema_Registery_Keystore_Password":
+                    prop.put("schema.registry.ssl.keystore.password", value);
+                    break;
+                case "Schema_Registery_Key_Password":
+                    prop.put("schema.registry.ssl.key.password", value);
+                    break;
+
             }
         }
         return prop;
