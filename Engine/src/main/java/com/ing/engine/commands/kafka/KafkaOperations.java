@@ -751,17 +751,12 @@ private final static ObjectMapper mapper = new ObjectMapper();
      */
     public boolean getXMLRecordForAssertion(String XMLMessage) {
         try {
-//            javax.xml.parsers.DocumentBuilderFactory dbFactory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
-//            javax.xml.parsers.DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
             DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
             DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
-//            org.xml.sax.InputSource inputSource = new org.xml.sax.InputSource(new java.io.StringReader(XMLMessage));
-//            org.w3c.dom.Document doc = dBuilder.parse(inputSource);
             InputSource inputSource = new org.xml.sax.InputSource(new java.io.StringReader(XMLMessage));
             Document doc = dBuilder.parse(inputSource);
             doc.getDocumentElement().normalize();
 
-//            javax.xml.xpath.XPath xPath = javax.xml.xpath.XPathFactory.newInstance().newXPath();
             XPath xPath = XPathFactory.newInstance().newXPath();
 
             // Get the list of (path -> expectedValue) condition maps for this key
