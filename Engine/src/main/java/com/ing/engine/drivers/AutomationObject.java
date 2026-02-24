@@ -5,8 +5,10 @@ import com.ing.datalib.or.common.ORAttribute;
 import com.ing.datalib.or.common.ObjectGroup;
 import com.ing.datalib.or.mobile.MobileORObject;
 import com.ing.datalib.or.mobile.MobileORPage;
+import com.ing.datalib.or.mobile.ResolvedMobileObject;
 import com.ing.datalib.or.web.WebORObject;
 import com.ing.datalib.or.web.WebORPage;
+import com.ing.datalib.or.web.ResolvedWebObject;
 import com.ing.engine.constants.SystemDefaults;
 import com.ing.engine.core.Control;
 import com.ing.engine.core.CommandControl;
@@ -128,7 +130,8 @@ public class AutomationObject {
     }
 
     public List<Locator> findElements(String objectKey, String pageKey, FindType condition) {
-        return findElements(objectKey, pageKey, condition);
+        //return findElements(objectKey, pageKey, condition);
+        return findElements(objectKey, pageKey, null, condition);
     }
 
     public List<Locator> findElements(String objectKey, String pageKey, String Attribute, FindType condition) {
@@ -142,10 +145,28 @@ public class AutomationObject {
 
     public ObjectGroup<?> getORObject(String page, String object) {
         ObjectRepository objRep = Control.getCurrentProject().getObjectRepository();
-        if (objRep.getWebOR().getPageByName(page) != null) {
+        try {
+            ResolvedWebObject.PageRef wref = ResolvedWebObject.PageRef.parse(page);
+            ResolvedWebObject wresolved = objRep.resolveWebObject(wref, object);
+            if (wresolved != null && wresolved.getGroup() != null) {
+                return wresolved.getGroup();
+            }
+        } catch (Exception ignore) { }
+        try {
+            ResolvedMobileObject.PageRef mref = ResolvedMobileObject.PageRef.parse(page);
+            ResolvedMobileObject mresolved = objRep.resolveMobileObject(mref, object);
+            if (mresolved != null && mresolved.getGroup() != null) {
+                return mresolved.getGroup();
+            }
+        } catch (Exception ignore) { }
+        if (objRep.getWebOR() != null && objRep.getWebOR().getPageByName(page) != null) {
             return objRep.getWebOR().getPageByName(page).getObjectGroupByName(object);
-        } else if (objRep.getMobileOR().getPageByName(page) != null) {
+        } else if (objRep.getWebSharedOR() != null && objRep.getWebSharedOR().getPageByName(page) != null) {
+            return objRep.getWebSharedOR().getPageByName(page).getObjectGroupByName(object);
+        } else if (objRep.getMobileOR() != null && objRep.getMobileOR().getPageByName(page) != null) {
             return objRep.getMobileOR().getPageByName(page).getObjectGroupByName(object);
+        } else if (objRep.getMobileSharedOR() != null && objRep.getMobileSharedOR().getPageByName(page) != null) {
+            return objRep.getMobileSharedOR().getPageByName(page).getObjectGroupByName(object);
         }
         return null;
     }
@@ -153,35 +174,49 @@ public class AutomationObject {
     public String getObjectProperty(String pageName, String objectName, String propertyName) {
         return getWebObject(pageName, objectName).getAttributeByName(propertyName);
     }
-
+    
     public ObjectGroup<WebORObject> getWebObjects(String page, String object) {
         ObjectRepository objRep = Control.getCurrentProject().getObjectRepository();
-        if (objRep.getWebOR().getPageByName(page) != null) {
+
+        try {
+            ResolvedWebObject.PageRef ref = ResolvedWebObject.PageRef.parse(page);
+            ResolvedWebObject resolved = objRep.resolveWebObject(ref, object);
+            if (resolved != null && resolved.getGroup() != null) {
+                return (ObjectGroup<WebORObject>) resolved.getGroup();
+            }
+        } catch (Exception ignore) { }
+        if (objRep.getWebOR() != null && objRep.getWebOR().getPageByName(page) != null) {
             return objRep.getWebOR().getPageByName(page).getObjectGroupByName(object);
+        } else if (objRep.getWebSharedOR() != null && objRep.getWebSharedOR().getPageByName(page) != null) {
+            return objRep.getWebSharedOR().getPageByName(page).getObjectGroupByName(object);
         }
         return null;
     }
 
     public WebORObject getWebObject(String page, String object) {
-        ObjectRepository objRep = Control.getCurrentProject().getObjectRepository();
-        if (objRep.getWebOR().getPageByName(page) != null) {
-            return objRep.getWebOR().getPageByName(page).getObjectGroupByName(object).getObjects().get(0);
+        ObjectGroup<WebORObject> group = getWebObjects(page, object);
+        if (group != null && group.getObjects() != null && !group.getObjects().isEmpty()) {
+            return group.getObjects().get(0);
         }
         return null;
     }
 
     public ObjectGroup<MobileORObject> getMobileObjects(String page, String object) {
         ObjectRepository objRep = Control.getCurrentProject().getObjectRepository();
-        if (objRep.getMobileOR().getPageByName(page) != null) {
+        if (objRep.getMobileOR() != null && objRep.getMobileOR().getPageByName(page) != null) {
             return objRep.getMobileOR().getPageByName(page).getObjectGroupByName(object);
+        } else if (objRep.getMobileSharedOR() != null && objRep.getMobileSharedOR().getPageByName(page) != null) {
+            return objRep.getMobileSharedOR().getPageByName(page).getObjectGroupByName(object);
         }
         return null;
     }
 
     public MobileORObject getMobileObject(String page, String object) {
         ObjectRepository objRep = Control.getCurrentProject().getObjectRepository();
-        if (objRep.getMobileOR().getPageByName(page) != null) {
+        if (objRep.getMobileOR() != null && objRep.getMobileOR().getPageByName(page) != null) {
             return objRep.getMobileOR().getPageByName(page).getObjectGroupByName(object).getObjects().get(0);
+        } else if (objRep.getMobileSharedOR() != null && objRep.getMobileSharedOR().getPageByName(page) != null) {
+            return objRep.getMobileSharedOR().getPageByName(page).getObjectGroupByName(object).getObjects().get(0);
         }
         return null;
     }
@@ -692,6 +727,12 @@ public class AutomationObject {
 
     }
 
+    private String stripScope(String pageKey) {
+        if (pageKey == null) return null;
+        int at = pageKey.lastIndexOf('@');
+        return (at > 0) ? pageKey.substring(0, at) : pageKey;
+    }
+
     public List<String> getObjectList(String page, String regexObject) {
         if (page == null || page.trim().isEmpty()) {
             throw new RuntimeException("Page Name is empty please give a valid pageName");
@@ -699,11 +740,32 @@ public class AutomationObject {
         ObjectRepository objRep = Control.getCurrentProject().getObjectRepository();
         WebORPage wPage = null;
         MobileORPage mPage = null;
-        if (objRep.getWebOR().getPageByName(page) != null) {
+        try {
+            ResolvedWebObject.PageRef ref = ResolvedWebObject.PageRef.parse(page);
+
+            if (ref != null && ref.scope != null) {
+                // Scoped: pick only the specified OR
+                if (ref.scope.name().equals("SHARED")) {
+                    wPage = objRep.getWebSharedOR().getPageByName(ref.name);
+                } else {
+                    wPage = objRep.getWebOR().getPageByName(ref.name);
+                }
+            } else {
+                // Unscoped: project-first then shared
+                wPage = objRep.getWebOR().getPageByName(ref.name);
+                if (wPage == null) wPage = objRep.getWebSharedOR().getPageByName(ref.name);
+            }
+
+        } catch (Exception ignore) {
+            // If parsing fails, treat as plain page name
             wPage = objRep.getWebOR().getPageByName(page);
-        } else if (objRep.getMobileOR().getPageByName(page) != null) {
-            mPage = objRep.getMobileOR().getPageByName(page);
+            if (wPage == null) wPage = objRep.getWebSharedOR().getPageByName(page);
         }
+
+        if (wPage == null && objRep.getMobileOR().getPageByName(stripScope(page)) != null) {
+            mPage = objRep.getMobileOR().getPageByName(stripScope(page));
+        }
+
         if (wPage == null && mPage == null) {
             throw new RuntimeException("Page [" + page + "] is not available in ObjectRepository");
         }
