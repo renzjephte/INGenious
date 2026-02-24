@@ -61,6 +61,15 @@ import org.w3c.dom.Document;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
+/**
+ * Provides end‑to‑end Kafka producer and consumer utilities for the test framework, including
+ * topic setup, SSL/Schema Registry configuration, message production (String/byte[]/Avro),
+ * and consumption with retry-based polling. Also supports JSONPath/XPath assertions to
+ * identify a target record and store or validate fields from consumed messages.
+ *
+ * <p>State is maintained per framework {@code key}, allowing multiple independent Kafka
+ * operations. Not thread‑safe.
+ */
 public class KafkaOperations extends General {
 
 private final static ObjectMapper mapper = new ObjectMapper();
@@ -572,6 +581,17 @@ private final static ObjectMapper mapper = new ObjectMapper();
         }
     }
 
+    /**
+     * Polls the Kafka consumer for the configured number of retries and returns the
+     * polled batch that contains a record matching the assertion criteria.
+     * Each attempt polls using the duration configured for {@code key}.
+     * <p>
+     * Side effects: Updates {@code kafkaConsumerPollRecord} and logs to stdout.
+     *
+     * @return the {@link ConsumerRecords} containing the matched record, or {@code null}
+     *         if no matching record is found after all retries
+     * @throws SerializationException if a deserialization error occurs during polling
+     */
     private ConsumerRecords<String, Object> pollKafkaConsumer() throws SerializationException {
         int maxRetries = kafkaConsumerPollRetries.get(key);
         int attempt = 1;
@@ -671,6 +691,18 @@ private final static ObjectMapper mapper = new ObjectMapper();
         return matchFound;
     }
 
+    /**
+     * Validates a JSON message against all JSONPath conditions associated with {@code key}.
+     * Each condition consists of one JSONPath expression mapped to an expected value.
+     * Returns {@code true} only if every condition matches; otherwise {@code false}.
+     * <p>
+     * Side effect: On success, stores the JSON message in {@code kafkaConsumeRecordValue.put(key, JSONMessage)}.
+     * Any JSON parsing or evaluation error is logged and results in {@code false}.
+     *
+     * @param JSONMessage the JSON payload to evaluate
+     * @return {@code true} if all JSONPath -> expectedValue conditions for {@code key} match;
+     *         {@code false} if none exist, a mismatch occurs, or an exception is thrown
+     */
     public boolean getJSONRecordForAssertion(String JSONMessage) {
         try {
             // Prefer multi-condition evaluation if present
@@ -684,10 +716,12 @@ private final static ObjectMapper mapper = new ObjectMapper();
                     String path = entry.getKey();
                     String expected = entry.getValue();
 
-                    Object actualObj = com.jayway.jsonpath.JsonPath.read(JSONMessage, path);
+//                    Object actualObj = com.jayway.jsonpath.JsonPath.read(JSONMessage, path);
+                    Object actualObj = JsonPath.read(JSONMessage, path);
                     String actual = (actualObj == null) ? null : String.valueOf(actualObj);
 
-                    if (!java.util.Objects.equals(actual, expected)) {
+//                    if (!java.util.Objects.equals(actual, expected)) {
+                    if (!Objects.equals(actual, expected)) {
                         // Early exit on first mismatch
                         return false;
                     }
@@ -704,15 +738,31 @@ private final static ObjectMapper mapper = new ObjectMapper();
         return false;
     }
 
+    /**
+     * Parses the given XML string and validates it against XPath conditions linked to {@code key}.
+     * Returns {@code true} only if all conditions match; otherwise {@code false}.
+     * <p>
+     * Side effect: On success, stores the original XML in {@code kafkaConsumeRecordValue.put(key, XMLMessage)}.
+     * Any parsing/XPath error is logged and results in {@code false}.
+     *
+     * @param XMLMessage well-formed XML payload to evaluate
+     * @return {@code true} if all XPath -> expectedValue conditions for {@code key} match;
+     *         {@code false} if none exist, any mismatch occurs, or an error is thrown
+     */
     public boolean getXMLRecordForAssertion(String XMLMessage) {
         try {
-            javax.xml.parsers.DocumentBuilderFactory dbFactory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
-            javax.xml.parsers.DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
-            org.xml.sax.InputSource inputSource = new org.xml.sax.InputSource(new java.io.StringReader(XMLMessage));
-            org.w3c.dom.Document doc = dBuilder.parse(inputSource);
+//            javax.xml.parsers.DocumentBuilderFactory dbFactory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+//            javax.xml.parsers.DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+            DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+//            org.xml.sax.InputSource inputSource = new org.xml.sax.InputSource(new java.io.StringReader(XMLMessage));
+//            org.w3c.dom.Document doc = dBuilder.parse(inputSource);
+            InputSource inputSource = new org.xml.sax.InputSource(new java.io.StringReader(XMLMessage));
+            Document doc = dBuilder.parse(inputSource);
             doc.getDocumentElement().normalize();
 
-            javax.xml.xpath.XPath xPath = javax.xml.xpath.XPathFactory.newInstance().newXPath();
+//            javax.xml.xpath.XPath xPath = javax.xml.xpath.XPathFactory.newInstance().newXPath();
+            XPath xPath = XPathFactory.newInstance().newXPath();
 
             // Get the list of (path -> expectedValue) condition maps for this key
             List<HashMap<String, String>> conditions = kafkaRecordIdentifier.get(key);
@@ -1013,21 +1063,21 @@ private final static ObjectMapper mapper = new ObjectMapper();
                 case "Producer_Key_Password":
                     prop.put("ssl.key.password", value);
                     break;
-                case "Schema_Registery_Truststore_Location":
+                case "Schema_Registry_Truststore_Location":
                     String producerSchemaTrustStroreLocation = Paths.get(value).toAbsolutePath().toString();
                     prop.put("schema.registry.ssl.truststore.location", producerSchemaTrustStroreLocation);
                     break;
-                case "Schema_Registery_Truststore_Password":
+                case "Schema_Registry_Truststore_Password":
                     prop.put("schema.registry.ssl.truststore.password", value);
                     break;
-                case "Schema_Registery_Keystore_Location":
+                case "Schema_Registry_Keystore_Location":
                     String producerSchemaKeyStroreLocation = Paths.get(value).toAbsolutePath().toString();
                     prop.put("schema.registry.ssl.keystore.location", producerSchemaKeyStroreLocation);
                     break;
-                case "Schema_Registery_Keystore_Password":
+                case "Schema_Registry_Keystore_Password":
                     prop.put("schema.registry.ssl.keystore.password", value);
                     break;
-                case "Schema_Registery_Key_Password":
+                case "Schema_Registry_Key_Password":
                     prop.put("schema.registry.ssl.key.password", value);
                     break;
             }
@@ -1062,24 +1112,23 @@ private final static ObjectMapper mapper = new ObjectMapper();
                 case "Consumer_Key_Password":
                     prop.put("ssl.key.password", value);
                     break;
-                case "Schema_Registery_Truststore_Location":
+                case "Schema_Registry_Truststore_Location":
                     String consumerSchemaTrustStroreLocation = Paths.get(value).toAbsolutePath().toString();
                     prop.put("schema.registry.ssl.truststore.location", consumerSchemaTrustStroreLocation);
                     break;
-                case "Schema_Registery_Truststore_Password":
+                case "Schema_Registry_Truststore_Password":
                     prop.put("schema.registry.ssl.truststore.password", value);
                     break;
-                case "Schema_Registery_Keystore_Location":
+                case "Schema_Registry_Keystore_Location":
                     String consumerSchemaKeyStroreLocation = Paths.get(value).toAbsolutePath().toString();
                     prop.put("schema.registry.ssl.keystore.location", consumerSchemaKeyStroreLocation);
                     break;
-                case "Schema_Registery_Keystore_Password":
+                case "Schema_Registry_Keystore_Password":
                     prop.put("schema.registry.ssl.keystore.password", value);
                     break;
-                case "Schema_Registery_Key_Password":
+                case "Schema_Registry_Key_Password":
                     prop.put("schema.registry.ssl.key.password", value);
                     break;
-
             }
         }
         return prop;
