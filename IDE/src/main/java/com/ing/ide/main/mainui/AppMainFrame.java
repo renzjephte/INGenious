@@ -104,7 +104,7 @@ public class AppMainFrame extends JFrame {
     private final LoaderScreen loader;
 
     private QUIT_TYPE quitType = QUIT_TYPE.NORMAL;
-
+    
     private enum QUIT_TYPE {
         NORMAL,
         FORCE,

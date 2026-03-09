@@ -4,7 +4,6 @@ package com.ing.ide.main.mainui;
 import com.ing.engine.support.methodInf.MethodInfoManager;
 import com.ing.ide.main.bdd.BddParser;
 import com.ing.ide.main.explorer.ExplorerBar;
-import com.ing.ide.main.Main;
 import com.ing.ide.main.help.Help;
 import com.ing.ide.main.mainui.components.testdesign.testdata.ImportTestData;
 import com.ing.ide.main.settings.INGeniousSettings;
@@ -21,16 +20,20 @@ import com.ing.ide.main.utils.CMProjectCreator;
 import com.ing.ide.main.utils.Utils;
 import com.ing.ide.util.Notification;
 import com.ing.ide.util.logging.UILogger;
+import java.awt.Color;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.swing.JToggleButton;
 import java.util.Timer;
 import java.util.TimerTask;
+import javax.swing.UIManager;
 
 public class AppActionListener implements ActionListener {
 
@@ -59,8 +62,6 @@ public class AppActionListener implements ActionListener {
     private final AppToolBar appToolBar;
     
     private Timer autoSaveTimer;
-    
-    private boolean autoSaveEnabled = false;
     
     //private static AppActionListener instance;
     
@@ -98,10 +99,14 @@ public class AppActionListener implements ActionListener {
                 sMainFrame.quit();
                 break;
             case "Auto Save":
-                autoSaveEnabled = !autoSaveEnabled;
-                if (autoSaveEnabled) {
+                JToggleButton toggleSwitch = appToolBar.getToggleSwitch();
+                if (toggleSwitch.isSelected()) {
+                    toggleSwitch.setText("ON");
+                    toggleSwitch.setBackground(Color.decode("#349651"));
                     startAutoSave();
                 } else {
+                    toggleSwitch.setText("OFF");
+                    toggleSwitch.setBackground(UIManager.getColor("text"));
                     stopAutoSave();
                 }
                 break;    
@@ -190,17 +195,10 @@ public class AppActionListener implements ActionListener {
             case "Dashboard":
                 sMainFrame.showDashBoard();
                 break;
-            case "API Tester":
-                sMainFrame.showAPITester();
-                break;
             case "Refresh":
                 doRefresh();
                 break;
             case "AdjustUI":
-                sMainFrame.adjustUI();
-                break;
-            case "Dark Mode":
-                Main.toggleTheme();
                 sMainFrame.adjustUI();
                 break;
             case "Create CM Project":
@@ -225,22 +223,23 @@ public class AppActionListener implements ActionListener {
                         PlaywrightRecordingParser playwrightRecordingParser = new PlaywrightRecordingParser(sMainFrame);
                         String ProjectLocation = sMainFrame.getProject().getLocation();
                         sMainFrame.loadProject(ProjectLocation);
-                        File originalFile = new File(ProjectLocation + File.separator + "Recording" + File.separator + "recording.txt");
-                        File renamedFile = new File(ProjectLocation + File.separator + "Recording" + File.separator + ScenarioName + ".txt");
-
-                        if (originalFile.exists()) {
-                            boolean success = originalFile.renameTo(renamedFile);
-                            if (success) {
-                                Notification.show("Recorded steps saved as " + renamedFile.getAbsolutePath());
-                            } else {
-                                Notification.show("Failed to save recorded steps.");
+                        File recordingDir = new File(ProjectLocation + File.separator + "Recording");
+                        File[] recordingFiles = recordingDir.listFiles((dir, name) -> name.startsWith("recording_") && name.endsWith(".txt"));
+                        if (recordingFiles != null && recordingFiles.length > 0) {
+                            Arrays.sort(recordingFiles, Comparator.comparingLong(File::lastModified).reversed());
+                            File latestFile = recordingFiles[0];
+                            File duplicateFile = new File(recordingDir, ScenarioName + ".txt");
+                            try {
+                                Files.copy(latestFile.toPath(), duplicateFile.toPath());
+                            } catch (IOException e) {
+                                e.printStackTrace();
                             }
+
+                            playwrightRecordingParser.playwrightParser(duplicateFile);
+                            sMainFrame.loadProject(ProjectLocation);  
                         } else {
-                            Notification.show("Original file does not exist.");
-                        }
-                        
-                        playwrightRecordingParser.playwrightParser(renamedFile);
-                        sMainFrame.loadProject(ProjectLocation);                                     
+                            System.out.println("No recording file found.");
+                        }    
                     } catch (Exception ex) {
                         Logger.getLogger(AppActionListener.class.getName()).log(Level.SEVERE, null, ex);
                     }
