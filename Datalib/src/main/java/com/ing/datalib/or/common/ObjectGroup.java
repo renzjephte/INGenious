@@ -92,8 +92,23 @@ public class ObjectGroup<T extends ORObjectInf> implements TreeNode {
         if (getObjectByName(objectName) == null) {
             T object = getNewObject(objectName, this);
             objects.add(object);
-            new File(object.getRepLocation()).mkdirs();
+            // Only create folder for non-YAML formats
+            if (parent.getRoot().getObjectRepository() == null 
+                || !parent.getRoot().getObjectRepository().isUsingYamlFormat()) {
+                new File(object.getRepLocation()).mkdirs();
+            }
             parent.getRoot().setSaved(false);
+            
+            // Auto-save for YAML format
+            if (parent.getRoot().getObjectRepository() != null 
+                && parent.getRoot().getObjectRepository().isUsingYamlFormat()) {
+                // Trigger save at the page level
+                if (parent instanceof com.ing.datalib.or.web.WebORPage) {
+                    parent.getRoot().getObjectRepository().saveWebPageNow((com.ing.datalib.or.web.WebORPage) parent);
+                } else if (parent instanceof com.ing.datalib.or.mobile.MobileORPage) {
+                    parent.getRoot().getObjectRepository().saveMobilePageNow((com.ing.datalib.or.mobile.MobileORPage) parent);
+                }
+            }
             return object;
         }
         return null;
