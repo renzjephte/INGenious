@@ -16,6 +16,7 @@ import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.stream.Collectors;
 
 /**
  * Action discovery and documentation commands.
@@ -339,7 +340,7 @@ public class ActionCommand implements Callable<Integer> {
                             .filter(a -> a.name.toLowerCase().contains(actionName.toLowerCase().substring(0, Math.min(4, actionName.length()))))
                             .map(a -> a.name)
                             .limit(5)
-                            .toList();
+                            .collect(Collectors.toList());
                     
                     if (!suggestions.isEmpty()) {
                         cli.printInfo("Did you mean: " + String.join(", ", suggestions));

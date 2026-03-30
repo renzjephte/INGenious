@@ -76,7 +76,7 @@
 
     </properties>
     <name>ingenious</name>
-    <dependencyManagement>
+    <!-- <dependencyManagement>
         <dependencies>
             <dependency>
                 <groupId>org.mockito</groupId>
@@ -91,7 +91,7 @@
                 <scope>test</scope>
             </dependency>
         </dependencies>
-    </dependencyManagement>
+    </dependencyManagement> -->
     <build>
         <pluginManagement>
             <plugins>
