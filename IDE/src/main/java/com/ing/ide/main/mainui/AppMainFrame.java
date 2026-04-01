@@ -626,6 +626,7 @@ public class AppMainFrame extends JFrame {
         if (sProject != null && !sProject.getName().isEmpty()) {
             sProject.save();
             testDesign.save();
+            apiTester.saveData();
         }
     }
 
@@ -681,6 +682,7 @@ public class AppMainFrame extends JFrame {
         testExecution.afterProjectChange();
         dashBoard.loadTree();
         dashBoardManager.onProjectChanged();
+        apiTester.loadData();
         sActionListener.afterProjectChange();
         setTitle(sProject.getName() + " - " + getAppTitle());
         // Sync multi-environment state to both Swing and FX menus

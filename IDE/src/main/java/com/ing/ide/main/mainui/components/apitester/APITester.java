@@ -242,11 +242,19 @@ public class APITester {
     
     public void loadData() {
         Path apiPath = getApiDataPath();
-        if (apiPath == null) return;
+        if (apiPath == null) {
+            LOG.log(Level.WARNING, "Cannot load API Tester data - no project is open");
+            return;
+        }
+        
+        LOG.log(Level.INFO, "Loading API Tester data from: " + apiPath);
         
         loadCollections();
         loadEnvironments();
         loadHistory();
+        
+        LOG.log(Level.INFO, "Loaded {0} collections, {1} environments, {2} history entries", 
+                new Object[]{collections.size(), environments.size(), history.size()});
         
         // Set first active environment
         for (APIEnvironment env : environments) {
@@ -256,6 +264,9 @@ public class APITester {
                 break;
             }
         }
+        
+        // Refresh UI to display loaded data
+        apiTesterUI.refresh();
     }
     
     public void saveData() {
