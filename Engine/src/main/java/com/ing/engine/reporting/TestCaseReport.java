@@ -174,6 +174,19 @@ public final class TestCaseReport implements Report {
         currentStatus = state;
         stepNo++;
         setScreenShotName();
+        String emoji = "";
+        if(state.toString().contains("PASS"))
+          emoji = "✅";
+        if(state.toString().contains("FAIL"))
+          emoji = "❌";
+        if(state.toString().contains("DONE"))
+          emoji = "🟢"; 
+        if(state.toString().contains("WARNING"))
+          emoji = "🟡"; 
+        if(state.toString().contains("DEBUG"))
+          emoji = "🔴"; 
+        System.out.println(String.format("[%s]   | %s " + emoji, state, stepDescription));
+        System.out.println(String.format("\n%99s\n", "=").replace(" ", "="));
         
         String stepInfo = stepLevelLog(String.valueOf(getStep().StepNum), getStep().ObjectName, getStep().Action, getStep().Input, getStep().Condition, state, stepDescription);
         this.sb.append(stepInfo).append("\n");
